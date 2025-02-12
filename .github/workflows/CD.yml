@@ -3,16 +3,43 @@ name: CD Pipeline
 on:
   push:
     branches:
-      - main
+      - main  # Runs only on pushes to the main branch
 
 jobs:
   deploy:
+    name: deploy  # Job name must be exactly "deploy"
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
 
-      - name: Set Up Docker
-        run: |
-          docker build -t fastapi-app .
-          docker run -d -p 8000:8000 fastapi-app
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "🚀 Connecting to EC2 and starting deployment..."
+            
+            # Navigate to the deployment directory
+            mkdir -p /home/${{ secrets.EC2_USERNAME }}/app
+            cd /home/${{ secrets.EC2_USERNAME }}/app
+
+            # Stop and remove the old container (if it exists)
+            sudo docker stop fastapi-container || true
+            sudo docker rm fastapi-container || true
+
+            # Remove old project files
+            sudo rm -rf fastapi-book-project
+
+            # Clone the latest repository
+            git clone https://github.com/Samuel-Oyedeji/fastapi-book-project.git
+            cd fastapi-book-project
+
+            # Build and start the container
+            sudo docker build -t fastapi-app .
+            sudo docker run -d --name fastapi-container -p 80:80 -p 8000:8000 fastapi-app
+
+            echo "✅ Deployment successful!"
